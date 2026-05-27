@@ -50,11 +50,19 @@ public class SettingsAdapter {
                     headerCell.cell.setText(Translator.get(item.getKey()));
                     // Style header text in ghost accent color
                     try {
-                        TextView headerText = headerCell.cell.getTextView();
-                        if (headerText != null) {
-                            headerText.setTextColor(Theme.getHeaderTextColor());
-                            headerText.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-                            headerText.setLetterSpacing(0.04f);
+                        android.view.View hView = headerCell.cell.getView();
+                        if (hView instanceof android.view.ViewGroup) {
+                            android.view.ViewGroup hGroup = (android.view.ViewGroup) hView;
+                            for (int i = 0; i < hGroup.getChildCount(); i++) {
+                                android.view.View child = hGroup.getChildAt(i);
+                                if (child instanceof TextView) {
+                                    TextView headerText = (TextView) child;
+                                    headerText.setTextColor(Theme.getHeaderTextColor());
+                                    headerText.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+                                    headerText.setLetterSpacing(0.04f);
+                                    break;
+                                }
+                            }
                         }
                     } catch (Throwable ignored) {}
                     break;
