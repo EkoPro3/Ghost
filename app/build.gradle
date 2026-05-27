@@ -1,0 +1,135 @@
+apply plugin: 'com.android.application'
+
+android {
+    namespace 'akro.ghost.tele'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId "akro.ghost.tele"
+        minSdk 27
+        targetSdk 36
+        versionCode 316
+        versionName "1.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    // Use debug signing for release in CI (no keystore needed)
+    signingConfigs {
+        debug {
+            storeFile file("${System.getProperty('user.home')}/.android/debug.keystore")
+            storePassword "android"
+            keyAlias "androiddebugkey"
+            keyPassword "android"
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.debug
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    packaging {
+        resources {
+            excludes += '/META-INF/{AL2.0,LGPL2.1}'
+        }
+    }
+}
+
+dependencies {
+    implementation(libs.jcal)
+    compileOnly libs.api
+    implementation(libs.gson)
+    implementation(libs.appcompat)
+    implementation(libs.material)
+}
+
+// ============================================================
+// Task: Build settingsadapter → extract DEX → generate DexHolder.java
+// ============================================================
+tasks.register("copyLargestDexAsJava") {
+    dependsOn(":settingsadapter:assembleDebug")
+
+    doLast {
+        // Find APK - search broader path in case intermediates path varies
+        def apkSearchRoot = new File("$rootDir/settingsadapter/build")
+        def apkFiles = []
+        if (apkSearchRoot.exists()) {
+            apkSearchRoot.eachFileRecurse { f ->
+                if (f.name.endsWith(".apk") && !f.path.contains("test")) {
+                    apkFiles << f
+                }
+            }
+        }
+
+        if (apkFiles.isEmpty()) {
+            throw new GradleException(
+                "No APK found under settingsadapter/build/. " +
+                "Make sure ':settingsadapter:assembleDebug' succeeded."
+            )
+        }
+
+        // Pick largest APK
+        def apkFile = apkFiles.max { it.length() }
+        println "Using APK: ${apkFile.absolutePath} (${apkFile.length()} bytes)"
+
+        def tempDir = new File(buildDir, "tmp/dexExtract")
+        tempDir.mkdirs()
+
+        copy {
+            from zipTree(apkFile)
+            into tempDir
+            include "classes*.dex"
+        }
+
+        def dexFiles = fileTree(tempDir).matching { include "classes*.dex" }.files
+
+        if (dexFiles.isEmpty()) {
+            throw new GradleException(
+                "No DEX files found inside APK: ${apkFile.name}. " +
+                "The settingsadapter module may not have compiled any classes."
+            )
+        }
+
+        def largestDex = dexFiles.max { it.length() }
+        println "Using DEX: ${largestDex.name} (${largestDex.length()} bytes)"
+
+        byte[] dexBytes = largestDex.bytes
+        def hex = dexBytes.collect { String.format("%02X", it) }.join("")
+
+        def outputDir = file("$projectDir/src/main/java/akro/ghost/tele/dex")
+        outputDir.mkdirs()
+
+        def javaFile = new File(outputDir, "DexHolder.java")
+        javaFile.text = """
+package akro.ghost.tele.dex;
+
+public class DexHolder {
+    public static final byte[] DEX_BYTES = hexToBytes("${hex}");
+
+    private static byte[] hexToBytes(String hex) {
+        int len = hex.length();
+        byte[] data = new byte[len / 2];
+        for (int i = 0; i < len; i += 2) {
+            data[i / 2] = (byte) ((Character.digit(hex.charAt(i), 16) << 4)
+                                + Character.digit(hex.charAt(i + 1), 16));
+        }
+        return data;
+    }
+}
+"""
+        println "✅ Generated DexHolder.java from ${largestDex.name}"
+    }
+}
+
+preBuild.dependsOn("copyLargestDexAsJava")

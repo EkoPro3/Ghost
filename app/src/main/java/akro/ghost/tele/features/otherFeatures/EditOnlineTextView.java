@@ -1,0 +1,96 @@
+package akro.ghost.tele.features.otherFeatures;
+
+
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.RelativeSizeSpan;
+import android.widget.Toast;
+
+import akro.ghost.tele.Class.ClassLoad;
+import akro.ghost.tele.Class.ClassNames;
+import akro.ghost.tele.Configs.ConfigManager;
+import akro.ghost.tele.base.AbstractMethodHook;
+import akro.ghost.tele.hooks.HMethod;
+import akro.ghost.tele.language.Keys;
+import akro.ghost.tele.language.Translator;
+import akro.ghost.tele.logging.Logger;
+import akro.ghost.tele.obfuscate.AutomationResolver;
+import akro.ghost.tele.virtuals.ActionBar.SimpleTextView;
+import akro.ghost.tele.virtuals.Theme;
+import akro.ghost.tele.virtuals.ui.ProfileActivity;
+
+public class EditOnlineTextView {
+    public static boolean isEnable = false;
+
+    public static void init(Context context) {
+        try {
+            if (!isEnable) {
+                isEnable = true;
+                HMethod.hookMethod(ClassLoad.getClass(ClassNames.PROFILE_ACTIVITY),
+                        AutomationResolver.resolve("ProfileActivity", "updateProfileData", AutomationResolver.ResolverType.Method),
+                        AutomationResolver.merge(AutomationResolver.resolveObject("updateProfileData", new Class[]{boolean.class}),
+                                new AbstractMethodHook() {
+                                    @Override
+                                    protected void afterMethod(MethodHookParam param) {
+                                        final ProfileActivity profileActivity = new ProfileActivity(param.thisObject);
+
+                                        Object[] onlineTextViewArray = profileActivity.getOnlineTextView();
+
+                                        if (onlineTextViewArray != null && onlineTextViewArray.length > 1) {
+
+                                            SimpleTextView simpleTextView = new SimpleTextView(onlineTextViewArray[1]);
+
+                                            if (simpleTextView.getSimpleTextView() != null) {
+                                                if ((profileActivity.getUserId() != 0 && profileActivity.getUserId() == profileActivity.getBaseFragment().getUserConfig().getClientUserId()) && ConfigManager.hideOnline.isEnable()) {
+                                                    simpleTextView.setText(Translator.get(Keys.UserOffline));
+                                                }
+
+                                                CharSequence oldText = simpleTextView.getText();
+
+                                                SpannableStringBuilder sb = new SpannableStringBuilder();
+                                                sb.append("\u200E");
+
+                                                sb.append("\u200F");
+                                                sb.append(oldText);
+                                                sb.append("\n");
+
+                                                int start = sb.length();
+                                                String id = String.valueOf(getID(profileActivity));
+                                                sb.append("ID: ").append(id);
+
+                                                sb.setSpan(new RelativeSizeSpan(1.0f), start, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                                                sb.setSpan(new ForegroundColorSpan(Theme.getTextColor()), start, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+
+                                                simpleTextView.setMaxLines(2);
+                                                simpleTextView.setText(sb, true);
+                                                simpleTextView.getSimpleTextView().setOnClickListener(v -> {
+                                                    if (simpleTextView.getText() != null) {
+                                                        String name = Translator.get(Keys.Copied, id);
+                                                        ((ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("clipboard", id));
+                                                        Toast.makeText(context, name, Toast.LENGTH_LONG).show();
+                                                    }
+                                                });
+                                            }
+                                        }
+                                    }
+                                })
+                );
+            }
+        } catch (Throwable t) {
+            Logger.e(t);
+        }
+    }
+
+    private static long getID(ProfileActivity profile) {
+        if (profile.getUserId() > 1) {
+            return profile.getUserId();
+        } else {
+            return profile.getChatId();
+        }
+    }
+
+}

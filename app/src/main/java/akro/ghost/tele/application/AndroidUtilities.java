@@ -1,0 +1,38 @@
+package akro.ghost.tele.application;
+
+import android.content.Context;
+import android.os.Handler;
+
+import akro.ghost.tele.logging.Logger;
+
+public class AndroidUtilities {
+
+    public static float density = 1;
+
+    public static volatile Handler applicationHandler;
+
+    public static void runOnUIThread(Runnable runnable) {
+        if (applicationHandler == null) {
+            return;
+        }
+        applicationHandler.post(runnable);
+
+    }
+
+    public static void init(Context context) {
+        try {
+            applicationHandler = new Handler(ApplicationLoaderHook.getApplicationContext().getMainLooper());
+            density = context.getResources().getDisplayMetrics().density;
+        } catch (Throwable e) {
+            Logger.e(e);
+        }
+    }
+
+    public static int dp(float value) {
+        if (value == 0) {
+            return 0;
+        }
+        return (int) Math.ceil(density * value);
+    }
+
+}
